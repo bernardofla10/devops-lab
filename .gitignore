@@ -33,3 +33,6 @@ venv/
 .terraform/
 *.tfstate
 *.tfstate.*
+
+# Lab outputs
+permission-lab-output/
