@@ -1,0 +1,27 @@
+[Unit]
+
+Description=Fake App Service for DevOps Linux Services Lab
+
+After=network.target
+
+
+
+[Service]
+
+Type=simple
+
+User=bernardofla10 
+
+WorkingDirectory=/mnt/c/Users/berna/devops-lab/week-01-linux/day-04-services-logs 
+
+ExecStart=/mnt/c/Users/berna/devops-lab/week-01-linux/day-04-services-logs/fake-app.sh
+
+Restart=always
+
+RestartSec=5
+
+
+
+[Install]
+
+WantedBy=multi-user.target
