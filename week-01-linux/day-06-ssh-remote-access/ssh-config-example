@@ -1,0 +1,14 @@
+# Example SSH config for DevOps Lab
+# Save this content in ~/.ssh/config and replace the placeholders.
+
+Host devops-local
+    HostName localhost
+    User your-linux-user
+    IdentityFile ~/.ssh/devops_lab_ed25519
+    Port 22
+
+Host example-server
+    HostName 203.0.113.10
+    User ubuntu
+    IdentityFile ~/.ssh/example-server.pem
+    Port 22
