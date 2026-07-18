@@ -1,0 +1,11 @@
+FROM node:20-alpine
+
+LABEL maintainer="Bernardo de Castro"
+LABEL description="Client container for Docker networks lab"
+
+WORKDIR /app
+
+COPY client/package.json ./package.json
+COPY client/client.js ./client.js
+
+CMD ["npm", "start"]

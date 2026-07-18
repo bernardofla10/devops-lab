@@ -1,0 +1,9 @@
+{
+  "name": "docker-network-api",
+  "version": "1.0.0",
+  "description": "Simple API for Docker networks lab",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
