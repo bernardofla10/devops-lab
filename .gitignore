@@ -45,3 +45,7 @@ permission-lab-output/
 
 # Generated reports
 reports/
+
+# Docker lab generated data
+host-data/
+volume-output/
