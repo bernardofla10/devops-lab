@@ -1,0 +1,9 @@
+{
+  "name": "containerized-api-final-lab",
+  "version": "1.0.0",
+  "description": "Final Docker fundamentals lab: containerized API with ports, env vars, logs, volumes and networks",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

@@ -1,0 +1,29 @@
+# Define o nome do projeto Compose
+name: devops-compose-day01
+
+# Define os serviços da aplicação
+services:
+  api:
+    build: # substitui o comando manual docker build -t devops-compose-api:day01 .
+      context: .
+      dockerfile: Dockerfile
+
+    image: devops-compose-api:day01 # define o nome da imagem construída
+
+    ports:
+      - "${HOST_PORT:-8089}:3000" # equivalente a -p 8089:3000
+      # significa usar HOST_PORT ou usar 8089 caso HOST_PORT não esteja definido
+
+    environment: # define as variáveis disponíveis dentro do container
+      APP_NAME: "${APP_NAME:-compose-api-day01}"
+      APP_ENV: "${APP_ENV:-development}"
+      PORT: "3000"
+      DATA_DIR: "/data"
+
+    volumes: # cria o volume nomeado api-data no diretório /data do container
+      - api-data:/data
+
+    restart: unless-stopped # reinicia o container depois de uma falha ou reinício do Docker
+
+volumes: # informa ao Compose que ele deve gerenciar esse named volume
+  api-data:
