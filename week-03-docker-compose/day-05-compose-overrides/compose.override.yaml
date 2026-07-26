@@ -1,0 +1,27 @@
+services:
+  db:
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+
+    restart: "no"
+
+  api:
+    command:
+      - node
+      - --watch
+      - server.js
+
+    environment:
+      APP_ENV: "development"
+      NODE_ENV: "development"
+
+    ports:
+      - "127.0.0.1:${API_DIRECT_PORT:-8096}:3000"
+
+    volumes:
+      - ./app/server.js:/app/server.js:ro
+
+    restart: "no"
+
+  gateway:
+    restart: "no"
