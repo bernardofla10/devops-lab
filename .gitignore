@@ -4,6 +4,9 @@
 .env.*
 !.env.example
 
+# Environment-specific local files
+env/*.env
+
 # Secrets and keys
 *.pem
 *.key
