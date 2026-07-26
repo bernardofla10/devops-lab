@@ -1,0 +1,113 @@
+name: devops-compose-day03
+
+services:
+  db:
+    image: postgres:18-alpine
+
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-devopsdb}"
+      POSTGRES_USER: "${POSTGRES_USER:-devops}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
+
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+
+    expose:
+      - "5432"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+
+    networks:
+      - private-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: devops-compose-api-adminer:day03
+
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8091}:3000"
+
+    environment:
+      APP_NAME: "${APP_NAME:-compose-api-adminer-day03}"
+      APP_ENV: "${APP_ENV:-development}"
+      PORT: "3000"
+
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DB_NAME: "${POSTGRES_DB:-devopsdb}"
+      DB_USER: "${POSTGRES_USER:-devops}"
+      DB_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
+
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000/health', res => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    restart: unless-stopped
+
+    networks:
+      - public-net
+      - private-net
+
+  adminer:
+    image: adminer:5-standalone
+
+    profiles:
+      - tools # API e banco formam o núcleo do stack, enquanto Adminer é habilitado apenas quando necessário.
+      # Serviços associados a um profile não iniciam por padrão, mas podem ser ativados com docker compose --profile
+
+    ports:
+      - "127.0.0.1:${ADMINER_HOST_PORT:-8092}:8080"
+
+    environment:
+      ADMINER_DEFAULT_SERVER: "db"
+      ADMINER_DESIGN: "nette"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    networks:
+      - public-net
+      - private-net
+
+volumes:
+  postgres-data:
+
+networks:
+  public-net:
+    driver: bridge
+
+  private-net:
+    driver: bridge
+    internal: true
