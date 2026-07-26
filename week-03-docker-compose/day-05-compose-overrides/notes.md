@@ -111,8 +111,6 @@ Then check:
 
 ## Mistakes or doubts
 
-Examples:
-
 - I started production without specifying `compose.production.yaml`.
 - I accidentally loaded the development override in production.
 - I expected a production container to read a changed host file.
