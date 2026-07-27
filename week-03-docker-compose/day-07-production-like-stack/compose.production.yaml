@@ -1,0 +1,53 @@
+services:
+  db:
+    restart: always
+
+    cpus: "0.75"
+    mem_limit: 384m
+    mem_reservation: 192m
+    pids_limit: 150
+
+  migrate:
+    read_only: true
+
+    security_opt:
+      - no-new-privileges:true
+
+    cpus: "0.25"
+    mem_limit: 96m
+    pids_limit: 50
+
+  api:
+    command:
+      - node
+      - server.js
+
+    environment:
+      APP_ENV: "production"
+
+    restart: always
+
+    read_only: true
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cpus: "0.50"
+    mem_limit: 128m
+    mem_reservation: 64m
+    pids_limit: 100
+
+  gateway:
+    restart: always
+
+    cpus: "0.25"
+    mem_limit: 64m
+    mem_reservation: 32m
+    pids_limit: 50
+
+networks:
+  backend-net:
+    internal: true

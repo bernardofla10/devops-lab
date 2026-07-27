@@ -1,0 +1,208 @@
+name: devops-compose-day07
+
+services:
+  db:
+    image: postgres:18-alpine
+
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-devopsdb}"
+      POSTGRES_USER: "${POSTGRES_USER:-devops}"
+      POSTGRES_PASSWORD_FILE: "/run/secrets/db_password"
+
+    secrets:
+      - db_password
+
+    volumes:
+      - postgres-data:/var/lib/postgresql
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+
+    networks:
+      - backend-net
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: devops-production-like-api:day07
+
+    command:
+      - node
+      - migrate.js
+
+    environment:
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DB_NAME: "${POSTGRES_DB:-devopsdb}"
+      DB_USER: "${POSTGRES_USER:-devops}"
+      DB_PASSWORD_FILE: "/run/secrets/db_password"
+
+    secrets:
+      - db_password
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: "no"
+
+    networks:
+      - backend-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: devops-production-like-api:day07
+
+    environment:
+      APP_NAME: "${APP_NAME:-production-like-compose-api}"
+      APP_ENV: "${APP_ENV:-development}"
+      PORT: "3000"
+
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DB_NAME: "${POSTGRES_DB:-devopsdb}"
+      DB_USER: "${POSTGRES_USER:-devops}"
+      DB_PASSWORD_FILE: "/run/secrets/db_password"
+
+    secrets:
+      - db_password
+
+    expose:
+      - "3000"
+
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+
+      migrate:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000/ready', res => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+
+    networks:
+      - frontend-net
+      - backend-net
+
+  gateway:
+    image: nginx:alpine
+
+    ports:
+      - "${GATEWAY_BIND_IP:-127.0.0.1}:${GATEWAY_HOST_PORT:-8099}:80"
+
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://localhost/gateway-health | grep -q gateway-ok"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+    restart: unless-stopped
+
+    networks:
+      - frontend-net
+
+  adminer:
+    image: adminer:5-standalone
+
+    profiles:
+      - tools
+
+    ports:
+      - "127.0.0.1:${ADMINER_HOST_PORT:-8101}:8080"
+
+    environment:
+      ADMINER_DEFAULT_SERVER: "db"
+      ADMINER_DESIGN: "nette"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    networks:
+      - frontend-net
+      - backend-net
+
+  test:
+    image: devops-production-like-api:day07
+
+    profiles:
+      - test
+
+    command:
+      - node
+      - integration-test.js
+
+    environment:
+      BASE_URL: "http://gateway"
+
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+    restart: "no"
+
+    networks:
+      - frontend-net
+
+volumes:
+  postgres-data:
+
+networks:
+  frontend-net:
+    driver: bridge
+
+  backend-net:
+    driver: bridge
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+
+configs:
+  nginx_config:
+    file: ./gateway/nginx.conf

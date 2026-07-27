@@ -1,0 +1,14 @@
+{
+  "name": "production-like-compose-stack",
+  "version": "1.0.0",
+  "description": "Final Docker Compose lab with API, PostgreSQL, migrations, tests, secrets and backup",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node migrate.js",
+    "test:integration": "node integration-test.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
