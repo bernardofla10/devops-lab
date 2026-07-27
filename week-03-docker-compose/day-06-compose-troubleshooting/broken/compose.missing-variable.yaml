@@ -1,0 +1,4 @@
+services:
+  api:
+    environment:
+      REQUIRED_LAB_TOKEN: "${REQUIRED_LAB_TOKEN:?REQUIRED_LAB_TOKEN must be set}"
