@@ -7,6 +7,13 @@
 # Environment-specific local files
 *.env
 
+# Local Compose secrets
+db_password.txt
+
+# Database backups
+backups/*.sql
+backups/*.dump
+
 # Secrets and keys
 *.pem
 *.key
