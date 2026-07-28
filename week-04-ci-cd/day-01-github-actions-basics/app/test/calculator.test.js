@@ -17,7 +17,7 @@ test("subtract returns the difference between two numbers", () => {
 });
 
 test("multiply returns the product of two numbers", () => {
-  assert.equal(multiply(6, 7), 43);
+  assert.equal(multiply(6, 7), 42);
 });
 
 test("divide returns the quotient of two numbers", () => {
