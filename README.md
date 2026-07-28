@@ -71,9 +71,66 @@ Labs:
 - Day 06 - Docker networks
 - Day 07 - Containerize a simple API
 
+### Week 03 - Docker Compose
+
+Focus:
+
+- Docker Compose fundamentals
+- Declarative multi-container environments
+- Service discovery
+- PostgreSQL integration
+- Service dependencies
+- Health checks
+- Named volumes
+- Public and private networks
+- Compose profiles
+- Adminer
+- Horizontal scaling
+- Restart policies
+- Resource limits
+- Development and production overrides
+- Troubleshooting
+- Migration jobs
+- Compose secrets and configs
+- Database backup and restore
+
+Labs:
+
+- Day 01 - Docker Compose basics
+- Day 02 - API and PostgreSQL
+- Day 03 - Adminer and network isolation
+- Day 04 - Scaling and failure recovery
+- Day 05 - Development and production overrides
+- Day 06 - Compose troubleshooting
+- Day 07 - Production-like Compose stack
+
+### Week 04 - CI/CD and Security Gates
+
+Focus:
+
+- GitHub Actions fundamentals
+- Workflow triggers
+- Jobs and steps
+- Node.js CI
+- Docker image builds
+- Workflow artifacts
+- Dependency scanning
+- Semgrep SAST
+- Trivy vulnerability scanning
+- Security gates
+- CI/CD pipeline integration
+
+Labs:
+
+- Day 01 - GitHub Actions fundamentals
+- Day 02 - Multiple jobs, dependencies and artifacts
+- Day 03 - Docker build in CI
+- Day 04 - Semgrep SAST security gate
+- Day 05 - Trivy dependency and image scanning
+- Day 06 - Branch protection and pipeline hardening
+- Day 07 - Final CI/CD and security pipeline
+
 ### Future weeks
 
-- Week 03 - Docker Compose
-- Week 04 - CI/CD and security gates
 - Week 05 - Cloud deployment
 - Week 06 - Observability, Terraform and Kubernetes overview
