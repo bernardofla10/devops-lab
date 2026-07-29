@@ -1,0 +1,16 @@
+{
+  "name": "semgrep-sast-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js application for Semgrep SAST security gate lab",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "lint": "node --check src/command-runner.js && node --check src/server.js && node --check test/server.test.js",
+    "test": "node --test",
+    "ci:local": "npm run lint && npm test"
+  }
+}
