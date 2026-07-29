@@ -1,0 +1,278 @@
+name: Week 04 Day 02 - Multi-job CI
+
+on:
+  push:
+    branches:
+      - main
+
+    paths:
+      - "week-04-ci-cd/day-02-multiple-jobs-artifacts/**"
+      - ".github/workflows/week-04-day-02-multi-job.yml"
+
+  pull_request:
+    branches:
+      - main
+
+    paths:
+      - "week-04-ci-cd/day-02-multiple-jobs-artifacts/**"
+      - ".github/workflows/week-04-day-02-multi-job.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: Generate build metadata
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 5
+
+    outputs:
+      short_sha: ${{ steps.build-metadata.outputs.short_sha }}
+      package_name: ${{ steps.build-metadata.outputs.package_name }}
+
+    steps:
+      - name: Generate metadata
+        id: build-metadata
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          package_name="calculator-package-${short_sha}"
+
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "package_name=$package_name" >> "$GITHUB_OUTPUT"
+
+          echo "Short SHA: $short_sha"
+          echo "Package name: $package_name"
+
+  lint:
+    name: Validate syntax
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-02-multiple-jobs-artifacts/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.x"
+          cache: npm
+          cache-dependency-path: week-04-ci-cd/day-02-multiple-jobs-artifacts/app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate JavaScript syntax
+        run: npm run lint
+
+  test:
+    name: Test with Node.js ${{ matrix.node-version }}
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false # obtém o resultado completo: Node 22: success/failure e Node 24: success/failure
+
+      matrix:
+        node-version:
+          - 22
+          - 24
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-02-multiple-jobs-artifacts/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: "${{ matrix.node-version }}.x"
+          cache: npm
+          cache-dependency-path: week-04-ci-cd/day-02-multiple-jobs-artifacts/app/package-lock.json
+
+      - name: Show Node.js version
+        run: |
+          node --version
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests and generate report
+        env:
+          TEST_REPORT_FILE: reports/test-report-node-${{ matrix.node-version }}.txt
+        run: npm run test:report
+
+      - name: Upload test report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7 # cada combinação (test-report-node-22 e test-report-node-24) gera um artifact diferente.
+        # upload usa always pois mesmo que o teste falhe, relatório ainda pode ser enviado.
+        with:
+          name: test-report-node-${{ matrix.node-version }}
+          path: week-04-ci-cd/day-02-multiple-jobs-artifacts/app/reports/
+          if-no-files-found: warn
+          retention-days: 7
+
+  package:
+    name: Build distributable package
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    needs:
+      - metadata
+      - lint
+      - test
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-02-multiple-jobs-artifacts/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.x"
+          cache: npm
+          cache-dependency-path: week-04-ci-cd/day-02-multiple-jobs-artifacts/app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        env:
+          PACKAGE_NAME: ${{ needs.metadata.outputs.package_name }}
+        run: npm run build
+
+      - name: Display package contents
+        env:
+          PACKAGE_NAME: ${{ needs.metadata.outputs.package_name }}
+        run: |
+          find "dist/$PACKAGE_NAME" \
+            -maxdepth 4 \
+            -type f \
+            -print \
+            | sort
+
+          cat "dist/$PACKAGE_NAME/manifest.json"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ needs.metadata.outputs.package_name }}
+          path: week-04-ci-cd/day-02-multiple-jobs-artifacts/app/dist/${{ needs.metadata.outputs.package_name }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  verify-artifact:
+    name: Download and verify artifact
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    needs:
+      - metadata
+      - package
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.x"
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.metadata.outputs.package_name }}
+          path: downloaded-package
+
+      - name: Display downloaded files
+        run: |
+          find downloaded-package \
+            -maxdepth 4 \
+            -type f \
+            -print \
+            | sort
+
+      - name: Run package smoke test
+        shell: bash
+        run: |
+          result="$(
+            node \
+              downloaded-package/bin/cli.js \
+              multiply \
+              6 \
+              7
+          )"
+
+          echo "CLI result: $result"
+
+          if [ "$result" != "42" ]; then
+            echo "Package smoke test failed."
+            exit 1
+          fi
+
+      - name: Generate package checksums
+        run: |
+          find downloaded-package \
+            -type f \
+            -print0 \
+            | sort -z \
+            | xargs -0 sha256sum
+
+  workflow-summary:
+    name: Generate workflow summary
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 5
+
+    if: ${{ always() }}
+
+    needs:
+      - metadata
+      - lint
+      - test
+      - package
+      - verify-artifact
+
+    steps:
+      - name: Write job summary
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Week 04 Day 02 - CI Summary
+
+          | Job | Result |
+          |---|---|
+          | Metadata | ${{ needs.metadata.result }} |
+          | Lint | ${{ needs.lint.result }} |
+          | Test matrix | ${{ needs.test.result }} |
+          | Package | ${{ needs.package.result }} |
+          | Artifact verification | ${{ needs.verify-artifact.result }} |
+
+          **Package:** \`${{ needs.metadata.outputs.package_name }}\`
+
+          **Commit:** \`${{ github.sha }}\`
+          EOF
