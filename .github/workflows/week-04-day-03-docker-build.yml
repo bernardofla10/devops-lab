@@ -113,8 +113,8 @@ jobs:
           context: week-04-ci-cd/day-03-docker-build-ci
           file: week-04-ci-cd/day-03-docker-build-ci/Dockerfile
 
-          load: true
-          push: false
+          load: true # constrói a imagem e carrega no docker engine.
+          push: false # não envia a registry
 
           platforms: linux/amd64
 
