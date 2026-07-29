@@ -1,0 +1,15 @@
+.git
+.github
+
+app/node_modules
+app/test
+
+semgrep-rules
+reports
+scripts
+
+*.md
+*.log
+
+.gitignore
+.semgrepignore
