@@ -1,0 +1,10 @@
+# Example only. Do not copy an exception without review.
+#
+# Vulnerability: CVE-2099-0000
+# Owner: application-security
+# Reason: no reachable vulnerable code path
+# Compensating control: endpoint disabled
+# Expiration: 2026-12-31
+# Review ticket: SEC-0000
+
+CVE-2099-0000

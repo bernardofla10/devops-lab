@@ -1,0 +1,311 @@
+name: Week 04 Day 05 - Trivy Security Gates
+
+on:
+  push:
+    branches:
+      - main
+
+    paths:
+      - "week-04-ci-cd/day-05-trivy-scanning/**"
+      - ".github/workflows/week-04-day-05-trivy.yml"
+
+  pull_request:
+    branches:
+      - main
+
+    paths:
+      - "week-04-ci-cd/day-05-trivy-scanning/**"
+      - ".github/workflows/week-04-day-05-trivy.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+env:
+  LAB_DIRECTORY: week-04-ci-cd/day-05-trivy-scanning
+  IMAGE_REFERENCE: trivy-security-lab:${{ github.sha }}
+
+jobs:
+  quality:
+    name: Application quality
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-05-trivy-scanning/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.x"
+          cache: npm
+          cache-dependency-path: week-04-ci-cd/day-05-trivy-scanning/app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate JavaScript syntax
+        run: npm run lint
+
+      - name: Run automated tests
+        run: npm test
+
+  filesystem-scan:
+    name: Trivy dependency security gate
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 15
+
+    outputs:
+      finding_count: ${{ steps.results.outputs.finding_count }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Create report directory
+        run: |
+          mkdir -p \
+            "$LAB_DIRECTORY/reports/filesystem"
+
+      - name: Generate filesystem JSON report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: week-04-ci-cd/day-05-trivy-scanning/app
+          scanners: vuln
+          vuln-type: library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          format: json
+          output: week-04-ci-cd/day-05-trivy-scanning/reports/filesystem/trivy-fs.json
+          exit-code: "0"
+
+      - name: Generate filesystem SARIF report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: week-04-ci-cd/day-05-trivy-scanning/app
+          scanners: vuln
+          vuln-type: library
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: week-04-ci-cd/day-05-trivy-scanning/reports/filesystem/trivy-fs.sarif
+          exit-code: "0"
+          skip-setup-trivy: true
+
+      - name: Read finding count
+        id: results
+        run: |
+          finding_count="$(
+            jq '
+              [
+                .Results[]?.Vulnerabilities[]?
+              ]
+              | length
+            ' \
+            "$LAB_DIRECTORY/reports/filesystem/trivy-fs.json"
+          )"
+
+          echo "finding_count=$finding_count" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "Filesystem findings: $finding_count"
+
+      - name: Upload filesystem reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-filesystem-reports
+          path: week-04-ci-cd/day-05-trivy-scanning/reports/filesystem/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload filesystem SARIF
+        if: >-
+          ${{
+            always() &&
+            (
+              github.event_name != 'pull_request' ||
+              github.event.pull_request.head.repo.full_name == github.repository
+            )
+          }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: week-04-ci-cd/day-05-trivy-scanning/reports/filesystem/trivy-fs.sarif
+          category: trivy-filesystem-week04-day05
+
+      - name: Enforce dependency security gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: week-04-ci-cd/day-05-trivy-scanning/app
+          scanners: vuln
+          vuln-type: library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          skip-setup-trivy: true
+
+  docker-image:
+    name: Build and scan container image
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+    needs:
+      - quality
+      - filesystem-scan
+
+    outputs:
+      finding_count: ${{ steps.results.outputs.finding_count }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build Docker image
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: |
+          docker build \
+            --tag "$IMAGE_REFERENCE" \
+            .
+
+      - name: Create image report directory
+        run: |
+          mkdir -p \
+            "$LAB_DIRECTORY/reports/image"
+
+      - name: Generate image JSON report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_REFERENCE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          format: json
+          output: week-04-ci-cd/day-05-trivy-scanning/reports/image/trivy-image.json
+          exit-code: "0"
+
+      - name: Generate image SARIF report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_REFERENCE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: week-04-ci-cd/day-05-trivy-scanning/reports/image/trivy-image.sarif
+          exit-code: "0"
+          skip-setup-trivy: true
+
+      - name: Read image finding count
+        id: results
+        run: |
+          finding_count="$(
+            jq '
+              [
+                .Results[]?.Vulnerabilities[]?
+              ]
+              | length
+            ' \
+            "$LAB_DIRECTORY/reports/image/trivy-image.json"
+          )"
+
+          echo "finding_count=$finding_count" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "Image findings: $finding_count"
+
+      - name: Upload image reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-image-reports
+          path: week-04-ci-cd/day-05-trivy-scanning/reports/image/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload image SARIF
+        if: >-
+          ${{
+            always() &&
+            (
+              github.event_name != 'pull_request' ||
+              github.event.pull_request.head.repo.full_name == github.repository
+            )
+          }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: week-04-ci-cd/day-05-trivy-scanning/reports/image/trivy-image.sarif
+          category: trivy-image-week04-day05
+
+      - name: Enforce container image security gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE_REFERENCE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          skip-setup-trivy: true
+
+      - name: Run container smoke test
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: |
+          ./scripts/smoke-test.sh \
+            "$IMAGE_REFERENCE" \
+            18085 \
+            trivy-security-lab-ci-test
+
+  workflow-summary:
+    name: Generate security summary
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 5
+
+    if: ${{ always() }}
+
+    needs:
+      - quality
+      - filesystem-scan
+      - docker-image
+
+    steps:
+      - name: Write summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Week 04 Day 05 - Trivy Security Gates
+
+          | Job | Result |
+          |---|---|
+          | Application quality | ${{ needs.quality.result }} |
+          | Dependency security gate | ${{ needs.filesystem-scan.result }} |
+          | Image security gate | ${{ needs.docker-image.result }} |
+
+          **Filesystem findings:** \`${{ needs.filesystem-scan.outputs.finding_count }}\`
+
+          **Image findings:** \`${{ needs.docker-image.outputs.finding_count }}\`
+
+          **Commit:** \`${{ github.sha }}\`
+          EOF
