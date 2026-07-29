@@ -1,0 +1,270 @@
+name: Week 04 Day 03 - Docker Build CI
+
+on:
+  push:
+    branches:
+      - main
+
+    paths:
+      - "week-04-ci-cd/day-03-docker-build-ci/**"
+      - ".github/workflows/week-04-day-03-docker-build.yml"
+
+  pull_request:
+    branches:
+      - main
+
+    paths:
+      - "week-04-ci-cd/day-03-docker-build-ci/**"
+      - ".github/workflows/week-04-day-03-docker-build.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LAB_DIRECTORY: week-04-ci-cd/day-03-docker-build-ci
+  IMAGE_NAME: devops-ci-api
+  TEST_IMAGE: devops-ci-api:ci-test
+
+jobs:
+  quality:
+    name: Application quality
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-03-docker-build-ci/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.x"
+          cache: npm
+          cache-dependency-path: week-04-ci-cd/day-03-docker-build-ci/app/package-lock.json
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate JavaScript syntax
+        run: npm run lint
+
+      - name: Run automated tests
+        run: npm test
+
+  docker-build:
+    name: Build and test Docker image
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+    needs:
+      - quality
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-03-docker-build-ci
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Generate Docker metadata
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+
+          tags: |
+            type=raw,value=ci-test
+            type=sha,prefix=sha-
+
+          labels: |
+            org.opencontainers.image.title=Docker CI API
+            org.opencontainers.image.description=Week 04 Day 03 Docker build lab
+
+      - name: Validate Docker build configuration
+        uses: docker/build-push-action@v7
+        with:
+          context: week-04-ci-cd/day-03-docker-build-ci
+          file: week-04-ci-cd/day-03-docker-build-ci/Dockerfile
+          call: check
+
+      - name: Build and load Docker image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: week-04-ci-cd/day-03-docker-build-ci
+          file: week-04-ci-cd/day-03-docker-build-ci/Dockerfile
+
+          load: true
+          push: false
+
+          platforms: linux/amd64
+
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+
+          build-args: |
+            BUILD_VERSION=sha-${{ github.sha }}
+            BUILD_REVISION=${{ github.sha }}
+
+          cache-from: type=gha,scope=week04-day03
+          cache-to: type=gha,mode=max,scope=week04-day03
+
+      - name: Inspect image
+        run: |
+          docker image inspect "$TEST_IMAGE"
+
+          docker history "$TEST_IMAGE"
+
+      - name: Test container
+        env:
+          REPORT_FILE: reports/github-actions-smoke-test.txt
+        run: |
+          ./scripts/test-container.sh \
+            "$TEST_IMAGE" \
+            18080 \
+            github-actions-docker-ci-test
+
+      - name: Upload smoke-test report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-smoke-test-report
+          path: week-04-ci-cd/day-03-docker-build-ci/reports/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Export Docker image
+        run: |
+          ./scripts/export-image.sh \
+            "$TEST_IMAGE" \
+            artifacts
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-image-week04-day03
+          path: week-04-ci-cd/day-03-docker-build-ci/artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Write build summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Docker Build
+
+          **Image:** \`${TEST_IMAGE}\`
+
+          **Image ID:** \`${{ steps.build.outputs.imageid }}\`
+
+          **Digest:** \`${{ steps.build.outputs.digest }}\`
+
+          **Revision:** \`${{ github.sha }}\`
+
+          The image was built, loaded, started and tested before export.
+          EOF
+
+  verify-image-artifact:
+    name: Verify exported Docker image
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 15
+
+    needs:
+      - docker-build
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-03-docker-build-ci
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: docker-image-week04-day03
+          path: week-04-ci-cd/day-03-docker-build-ci/downloaded-image
+
+      - name: Verify image checksum
+        run: |
+          cd downloaded-image
+
+          sha256sum \
+            -c devops-ci-api.tar.gz.sha256
+
+      - name: Load Docker image
+        run: |
+          gunzip \
+            --stdout \
+            downloaded-image/devops-ci-api.tar.gz \
+            | docker load
+
+          docker images | grep devops-ci-api
+
+      - name: Test image loaded from artifact
+        env:
+          REPORT_FILE: reports/artifact-image-smoke-test.txt
+        run: |
+          ./scripts/test-container.sh \
+            "$TEST_IMAGE" \
+            18081 \
+            artifact-docker-ci-test
+
+      - name: Upload artifact verification report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-artifact-verification-report
+          path: week-04-ci-cd/day-03-docker-build-ci/reports/
+          if-no-files-found: warn
+          retention-days: 7
+
+  workflow-summary:
+    name: Generate workflow summary
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 5
+
+    if: ${{ always() }}
+
+    needs:
+      - quality
+      - docker-build
+      - verify-image-artifact
+
+    steps:
+      - name: Write final summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Week 04 Day 03 - Docker CI Summary
+
+          | Job | Result |
+          |---|---|
+          | Application quality | ${{ needs.quality.result }} |
+          | Docker build and test | ${{ needs.docker-build.result }} |
+          | Exported image verification | ${{ needs.verify-image-artifact.result }} |
+
+          **Commit:** \`${{ github.sha }}\`
+          EOF
