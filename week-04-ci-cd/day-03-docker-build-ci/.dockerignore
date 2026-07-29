@@ -1,0 +1,16 @@
+.git
+.github
+
+app/node_modules
+app/test
+
+reports
+artifacts
+downloaded-image
+
+scripts
+
+*.md
+*.log
+
+.gitignore
