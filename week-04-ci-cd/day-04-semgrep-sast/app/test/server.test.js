@@ -59,16 +59,27 @@ test("GET /health returns status ok", async () => {
   assert.equal(body.status, "ok");
 });
 
-test("GET /run executes the requested operation", async () => {
-  const operation =
-    encodeURIComponent("printf semgrep-lab");
-
+test("GET /run executes an allowlisted operation", async () => {
   const response = await fetch(
-    `${baseUrl}/run?operation=${operation}`
+    `${baseUrl}/run?operation=node-version`
   );
 
   const body = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(body.stdout, "semgrep-lab");
+  assert.match(body.stdout, /^v\d+\./);
+});
+
+test("GET /run rejects unknown operations", async () => {
+  const response = await fetch(
+    `${baseUrl}/run?operation=not-allowed`
+  );
+
+  const body = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.equal(
+    body.error,
+    "operation_not_allowed"
+  );
 });

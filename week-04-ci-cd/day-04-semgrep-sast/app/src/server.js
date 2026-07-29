@@ -46,17 +46,25 @@ function createServer() {
     if (url.pathname === "/run") {
       const operation =
         url.searchParams.get("operation") ||
-        "printf semgrep-lab";
+        "node-version";
 
       runOperation(
         operation,
         (error, result) => {
           if (error) {
+            const statusCode =
+              error.code === "OPERATION_NOT_ALLOWED"
+                ? 400
+                : 500;
+
             sendJson(
               response,
-              500,
+              statusCode,
               {
-                error: "operation_failed",
+                error:
+                  error.code === "OPERATION_NOT_ALLOWED"
+                    ? "operation_not_allowed"
+                    : "operation_failed",
                 message: error.message
               }
             );
@@ -89,10 +97,12 @@ function createServer() {
         endpoints: [
           "/",
           "/health",
-          "/run?operation=printf%20semgrep-lab"
+          "/run?operation=node-version"
         ]
       }
     );
+
+    return;
   });
 }
 
