@@ -1,0 +1,20 @@
+{
+  "name": "multi-job-calculator-cli",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Calculator CLI for GitHub Actions multiple jobs and artifacts lab",
+  "main": "src/calculator.js",
+  "bin": {
+    "calculator-cli": "bin/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "node --check src/calculator.js && node --check bin/cli.js && node --check test/calculator.test.js && node --check test/cli.test.js && node --check scripts/build-package.js",
+    "test": "node --test",
+    "test:report": "bash scripts/test-with-report.sh",
+    "build": "node scripts/build-package.js",
+    "ci:local": "npm run lint && npm run test:report && npm run build"
+  }
+}
