@@ -32,7 +32,7 @@ test("CLI multiplies two numbers", () => {
   const result = runCli(["multiply", "6", "7"]);
 
   assert.equal(result.status, 0);
-  assert.equal(result.stdout.trim(), "43");
+  assert.equal(result.stdout.trim(), "42");
 });
 
 test("CLI rejects division by zero", () => {
