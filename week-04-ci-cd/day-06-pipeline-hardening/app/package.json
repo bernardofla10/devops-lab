@@ -1,0 +1,19 @@
+{
+  "name": "pipeline-hardening-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Application for GitHub Actions and branch protection hardening",
+  "main": "src/dependency-report.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/dependency-report.js",
+    "lint": "node --check src/dependency-report.js && node --check test/dependency-report.test.js",
+    "test": "node --test",
+    "ci:local": "npm run lint && npm test"
+  },
+  "dependencies": {
+    "lodash": "4.18.1"
+  }
+}
