@@ -42,10 +42,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24.x"
           cache: npm
@@ -72,8 +71,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Show Semgrep version
         run: |
           docker run --rm \
@@ -131,7 +129,7 @@ jobs:
 
       - name: Upload Semgrep reports
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: semgrep-sast-reports
           path: week-04-ci-cd/day-04-semgrep-sast/reports/
@@ -148,7 +146,7 @@ jobs:
             )
           }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
         with:
           sarif_file: week-04-ci-cd/day-04-semgrep-sast/reports/semgrep.sarif
           category: semgrep-week04-day04
@@ -185,18 +183,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build Docker image
         run: |
           docker build \
-            -t semgrep-sast-lab:${GITHUB_SHA::7} \
+            -t "semgrep-sast-lab:${GITHUB_SHA::7}" \
             .
 
       - name: Inspect Docker image
         run: |
           docker image inspect \
-            semgrep-sast-lab:${GITHUB_SHA::7}
+            "semgrep-sast-lab:${GITHUB_SHA::7}"
 
   workflow-summary:
     name: Generate workflow summary

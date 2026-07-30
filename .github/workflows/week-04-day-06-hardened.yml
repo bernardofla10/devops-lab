@@ -1,0 +1,204 @@
+name: Week 04 Day 06 - Hardened CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+concurrency:
+  group: >-
+    week04-day06-${{
+      github.workflow
+    }}-${{
+      github.head_ref || github.ref
+    }}
+
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LAB_DIRECTORY: week-04-ci-cd/day-06-pipeline-hardening
+
+jobs:
+  workflow-security:
+    name: Security - Workflow validation
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check action pins
+        run: |
+          python3 \
+            "$LAB_DIRECTORY/scripts/check-action-pins.py"
+
+      - name: Reject pull_request_target
+        shell: bash
+        run: |
+          if grep \
+            --recursive \
+            --line-number \
+            --extended-regexp \
+            '^[[:space:]]*pull_request_target[[:space:]]*:' \
+            .github/workflows; then
+
+            echo "pull_request_target is not allowed in this repository."
+            exit 1
+          fi
+
+          echo "No pull_request_target workflows were found."
+
+      - name: Validate workflows with actionlint
+        run: |
+          docker run \
+            --rm \
+            --volume "$PWD:/repo" \
+            --workdir /repo \
+            rhysd/actionlint:1.7.12
+
+  application-quality:
+    name: Quality - Hardened application
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-06-pipeline-hardening/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.x"
+          package-manager-cache: false
+
+      - name: Show versions
+        run: |
+          node --version
+          npm --version
+
+        # dependências npm podem definir lifecycle scripts como: preinstall, install, postinstall, prepare, etc.
+        # Em um PR, esses scripts fazem parte do código potencialmente não confiável.
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts # funciona pois Lodash não precisa de lifecycle script pra funcionar.
+
+      - name: Validate JavaScript syntax
+        run: npm run lint
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Run application
+        run: npm start
+
+  dependency-review:
+    name: Security - Dependency review
+
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        (
+          !github.event.repository.private ||
+          vars.DEPENDENCY_REVIEW_ENABLED == 'true'
+        )
+      }}
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false 
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
+        with:
+          config-file: ./.github/dependency-review-config.yml
+
+  required-gate:
+    name: Required - Hardened CI
+
+    # sem o if, uma falha anterior faria o job agregador (required-gate) ser ignorado.
+    if: ${{ always() }}
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 5
+
+    needs:
+      - workflow-security
+      - application-quality
+      - dependency-review
+
+    steps:
+      - name: Evaluate required checks
+        shell: bash
+        run: |
+          workflow_security="${{ needs.workflow-security.result }}"
+          application_quality="${{ needs.application-quality.result }}"
+          dependency_review="${{ needs.dependency-review.result }}"
+
+          echo "Workflow security:  $workflow_security"
+          echo "Application quality: $application_quality"
+          echo "Dependency review:   $dependency_review"
+
+          if [ "$workflow_security" != "success" ]; then
+            echo "Workflow security did not pass."
+            exit 1
+          fi
+
+          if [ "$application_quality" != "success" ]; then
+            echo "Application quality did not pass."
+            exit 1
+          fi
+
+          if [ "$dependency_review" != "success" ] &&
+             [ "$dependency_review" != "skipped" ]; then
+            echo "Dependency review did not pass."
+            exit 1
+          fi
+
+          echo "All required checks passed."
+
+      - name: Write required-check summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Required Hardened CI Gate
+
+          | Check | Result |
+          |---|---|
+          | Workflow security | ${{ needs.workflow-security.result }} |
+          | Application quality | ${{ needs.application-quality.result }} |
+          | Dependency review | ${{ needs.dependency-review.result }} |
+
+          **Required gate:** passed
+
+          **Commit:** \`${{ github.sha }}\`
+          EOF
