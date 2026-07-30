@@ -1,0 +1,12 @@
+# Default repository owner
+* @bernardofla10
+
+# CI/CD and repository governance
+/.github/workflows/ @bernardofla10
+/.github/dependabot.yml @bernardofla10
+/.github/dependency-review-config.yml @bernardofla10
+/.github/CODEOWNERS @bernardofla10
+/.github/pull_request_template.md @bernardofla10
+
+# Week 04 pipeline hardening lab
+/week-04-ci-cd/day-06-pipeline-hardening/ @bernardofla10

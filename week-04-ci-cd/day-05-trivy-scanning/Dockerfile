@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24-alpine
+FROM node:24.18.1-alpine
+
+# npm 11.16 bundles tar 7.5.15, which Trivy reports as affected by
+# CVE-2026-59873. npm 12.0.2 upgrades the bundled tar dependency to 7.5.19.
+RUN npm install --global npm@12.0.2 --ignore-scripts \
+    && npm cache clean --force
 
 LABEL org.opencontainers.image.title="Trivy Security Lab"
 LABEL org.opencontainers.image.description="Node.js API protected by Trivy security gates"

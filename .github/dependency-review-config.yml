@@ -1,0 +1,14 @@
+fail-on-severity: high
+
+fail-on-scopes:
+  - runtime
+
+vulnerability-check: true
+license-check: true
+
+warn-only: false
+
+show-openssf-scorecard: true
+show-patched-versions: true
+
+# dependência nova com vulnerabilidade high ou maior -> dependency review falha -> required gate falha -> merge bloqueado.

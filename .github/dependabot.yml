@@ -1,0 +1,40 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions # atualiza: actions/checkout;
+                                      #  actions/setup-node;
+                                      #  actions/dependency-review-action;
+                                      #  docker actions;
+                                      #  Trivy action;
+                                      #  CodeQL action.
+    directory: "/"
+
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: "America/Sao_Paulo"
+
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+    open-pull-requests-limit: 5
+
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: npm # atualiza o app do dia 6.
+    directory: "/week-04-ci-cd/day-06-pipeline-hardening/app"
+
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: "America/Sao_Paulo"
+
+    open-pull-requests-limit: 5
+
+    commit-message:
+      prefix: "deps"

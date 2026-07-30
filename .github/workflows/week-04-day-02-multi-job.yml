@@ -61,10 +61,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24.x"
           cache: npm
@@ -97,10 +96,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "${{ matrix.node-version }}.x"
           cache: npm
@@ -121,7 +119,7 @@ jobs:
 
       - name: Upload test report
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7 # cada combinação (test-report-node-22 e test-report-node-24) gera um artifact diferente.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         # upload usa always pois mesmo que o teste falhe, relatório ainda pode ser enviado.
         with:
           name: test-report-node-${{ matrix.node-version }}
@@ -147,10 +145,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24.x"
           cache: npm
@@ -177,7 +174,7 @@ jobs:
           cat "dist/$PACKAGE_NAME/manifest.json"
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ needs.metadata.outputs.package_name }}
           path: week-04-ci-cd/day-02-multiple-jobs-artifacts/app/dist/${{ needs.metadata.outputs.package_name }}/
@@ -197,12 +194,12 @@ jobs:
 
     steps:
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24.x"
 
       - name: Download package artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: ${{ needs.metadata.outputs.package_name }}
           path: downloaded-package

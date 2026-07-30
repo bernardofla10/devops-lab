@@ -42,10 +42,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24.x"
           cache: npm
@@ -72,15 +71,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Create report directory
         run: |
           mkdir -p \
             "$LAB_DIRECTORY/reports/filesystem"
 
       - name: Generate filesystem JSON report
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: week-04-ci-cd/day-05-trivy-scanning/app
@@ -92,7 +90,7 @@ jobs:
           exit-code: "0"
 
       - name: Generate filesystem SARIF report
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: week-04-ci-cd/day-05-trivy-scanning/app
@@ -124,7 +122,7 @@ jobs:
 
       - name: Upload filesystem reports
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: trivy-filesystem-reports
           path: week-04-ci-cd/day-05-trivy-scanning/reports/filesystem/
@@ -141,13 +139,13 @@ jobs:
             )
           }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
         with:
           sarif_file: week-04-ci-cd/day-05-trivy-scanning/reports/filesystem/trivy-fs.sarif
           category: trivy-filesystem-week04-day05
 
       - name: Enforce dependency security gate
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: week-04-ci-cd/day-05-trivy-scanning/app
@@ -175,8 +173,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build Docker image
         working-directory: ${{ env.LAB_DIRECTORY }}
         run: |
@@ -190,7 +187,7 @@ jobs:
             "$LAB_DIRECTORY/reports/image"
 
       - name: Generate image JSON report
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.IMAGE_REFERENCE }}
@@ -202,7 +199,7 @@ jobs:
           exit-code: "0"
 
       - name: Generate image SARIF report
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.IMAGE_REFERENCE }}
@@ -234,7 +231,7 @@ jobs:
 
       - name: Upload image reports
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: trivy-image-reports
           path: week-04-ci-cd/day-05-trivy-scanning/reports/image/
@@ -251,13 +248,13 @@ jobs:
             )
           }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
         with:
           sarif_file: week-04-ci-cd/day-05-trivy-scanning/reports/image/trivy-image.sarif
           category: trivy-image-week04-day05
 
       - name: Enforce container image security gate
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ env.IMAGE_REFERENCE }}
