@@ -1,0 +1,35 @@
+rules:
+  - id: javascript-child-process-exec
+    message: >-
+      Avoid child_process.exec because it invokes a shell and
+      can allow command injection. Prefer execFile or spawn
+      with an allowlisted executable and explicit arguments.
+    severity: HIGH
+    languages:
+      - javascript
+
+    metadata:
+      category: security
+      cwe: >-
+        CWE-78: Improper Neutralization of Special Elements
+        used in an OS Command
+
+    pattern-either:
+      - pattern: exec($COMMAND, ...)
+      - pattern: $CHILD_PROCESS.exec($COMMAND, ...)
+
+  - id: javascript-eval-use
+    message: >-
+      Avoid eval because it executes a string as JavaScript.
+      Use explicit parsing and validated data structures.
+    severity: CRITICAL
+    languages:
+      - javascript
+
+    metadata:
+      category: security
+      cwe: >-
+        CWE-95: Improper Neutralization of Directives in
+        Dynamically Evaluated Code
+
+    pattern: eval(...)

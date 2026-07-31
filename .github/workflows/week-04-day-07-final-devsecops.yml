@@ -1,0 +1,759 @@
+name: Week 04 Day 07 - Final DevSecOps Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+  schedule:
+    - cron: "30 8 * * 1"
+
+concurrency:
+  group: >-
+    week04-final-${{
+      github.workflow
+    }}-${{
+      github.head_ref || github.ref
+    }}
+
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LAB_DIRECTORY: week-04-ci-cd/day-07-final-devsecops-pipeline
+  TEST_IMAGE: final-devsecops-api:ci
+  SEMGREP_IMAGE: semgrep/semgrep:1.172.0
+
+jobs:
+  workflow-security:
+    name: Security - Workflow validation
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check full-SHA action pins
+        run: |
+          python3 \
+            "$LAB_DIRECTORY/scripts/check-action-pins.py"
+
+      - name: Reject pull_request_target
+        shell: bash
+        run: |
+          if grep \
+            --recursive \
+            --line-number \
+            --extended-regexp \
+            '^[[:space:]]*pull_request_target[[:space:]]*:' \
+            .github/workflows; then
+
+            echo "pull_request_target is not allowed."
+            exit 1
+          fi
+
+          echo "No pull_request_target workflows found."
+
+      - name: Validate workflows with actionlint
+        run: |
+          docker run \
+            --rm \
+            --volume "$PWD:/repo" \
+            --workdir /repo \
+            rhysd/actionlint:1.7.12
+
+  application-quality:
+    name: Quality - Application
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: week-04-ci-cd/day-07-final-devsecops-pipeline
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.x"
+          package-manager-cache: false
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Run application quality gate
+        run: ./scripts/app-checks.sh
+
+      - name: Upload test report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: final-node-test-report
+          path: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/tests/
+          if-no-files-found: warn
+          retention-days: 14
+
+  dependency-review:
+    name: Security - Dependency review
+
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        (
+          !github.event.repository.private ||
+          vars.DEPENDENCY_REVIEW_ENABLED == 'true'
+        )
+      }}
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
+        with:
+          config-file: ./.github/dependency-review-config.yml
+
+  semgrep:
+    name: Security - Semgrep SAST
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
+    outputs:
+      finding_count: ${{ steps.results.outputs.finding_count }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Show Semgrep version
+        run: |
+          docker run --rm \
+            "$SEMGREP_IMAGE" \
+            semgrep --version
+
+      - name: Test custom Semgrep rules
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -v "$PWD:/src" \
+            -w /src \
+            "$SEMGREP_IMAGE" \
+            semgrep scan \
+              --metrics=off \
+              --test \
+              --config semgrep-rules/rules \
+              semgrep-rules/tests
+
+      - name: Generate Semgrep reports
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: |
+          mkdir -p reports/semgrep
+
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -v "$PWD:/src" \
+            -w /src \
+            "$SEMGREP_IMAGE" \
+            semgrep scan \
+              --metrics=off \
+              --config semgrep-rules/rules \
+              --text \
+              --text-output=reports/semgrep/semgrep.txt \
+              --json-output=reports/semgrep/semgrep.json \
+              --sarif-output=reports/semgrep/semgrep.sarif \
+              app/src
+
+      - name: Read Semgrep finding count
+        id: results
+        run: |
+          finding_count="$(
+            jq \
+              '.results | length' \
+              "$LAB_DIRECTORY/reports/semgrep/semgrep.json"
+          )"
+
+          echo "finding_count=$finding_count" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "Semgrep findings: $finding_count"
+
+      - name: Upload Semgrep reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: final-semgrep-reports
+          path: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/semgrep/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Semgrep SARIF
+        if: >-
+          ${{
+            always() &&
+            (
+              github.event_name != 'pull_request' ||
+              github.event.pull_request.head.repo.full_name == github.repository
+            )
+          }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
+        with:
+          sarif_file: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/semgrep/semgrep.sarif
+          category: final-semgrep
+
+      - name: Enforce Semgrep gate
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: ./scripts/semgrep-gate.sh
+
+  trivy-filesystem:
+    name: Security - Trivy filesystem
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
+    outputs:
+      finding_count: ${{ steps.results.outputs.finding_count }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Create report directory
+        run: |
+          mkdir -p \
+            "$LAB_DIRECTORY/reports/trivy-filesystem"
+
+      - name: Generate Trivy filesystem JSON
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: week-04-ci-cd/day-07-final-devsecops-pipeline/app
+          scanners: vuln
+          vuln-type: library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          format: json
+          output: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-filesystem/trivy-fs.json
+          exit-code: "0"
+
+      - name: Generate Trivy filesystem SARIF
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: week-04-ci-cd/day-07-final-devsecops-pipeline/app
+          scanners: vuln
+          vuln-type: library
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-filesystem/trivy-fs.sarif
+          exit-code: "0"
+          skip-setup-trivy: true
+
+      - name: Read filesystem finding count
+        id: results
+        run: |
+          finding_count="$(
+            jq '
+              [
+                .Results[]?.Vulnerabilities[]?
+              ]
+              | length
+            ' \
+            "$LAB_DIRECTORY/reports/trivy-filesystem/trivy-fs.json"
+          )"
+
+          echo "finding_count=$finding_count" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "Filesystem findings: $finding_count"
+
+      - name: Upload filesystem reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: final-trivy-filesystem-reports
+          path: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-filesystem/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload filesystem SARIF
+        if: >-
+          ${{
+            always() &&
+            (
+              github.event_name != 'pull_request' ||
+              github.event.pull_request.head.repo.full_name == github.repository
+            )
+          }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
+        with:
+          sarif_file: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-filesystem/trivy-fs.sarif
+          category: final-trivy-filesystem
+
+      - name: Enforce dependency security gate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: week-04-ci-cd/day-07-final-devsecops-pipeline/app
+          scanners: vuln
+          vuln-type: library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          skip-setup-trivy: true
+
+  docker-build:
+    name: Build - Docker image
+
+    if: >-
+      ${{
+        always() &&
+        needs.workflow-security.result == 'success' &&
+        needs.application-quality.result == 'success' &&
+        needs.semgrep.result == 'success' &&
+        needs.trivy-filesystem.result == 'success' &&
+        (
+          needs.dependency-review.result == 'success' ||
+          needs.dependency-review.result == 'skipped'
+        )
+      }}
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+    needs:
+      - workflow-security
+      - application-quality
+      - dependency-review
+      - semgrep
+      - trivy-filesystem
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Generate Docker metadata
+        id: metadata
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: final-devsecops-api
+
+          tags: |
+            type=raw,value=ci
+            type=sha,prefix=sha-
+
+          labels: |
+            org.opencontainers.image.title=Final DevSecOps API
+            org.opencontainers.image.description=Week 04 final DevSecOps pipeline
+
+      - name: Validate Docker build configuration
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: week-04-ci-cd/day-07-final-devsecops-pipeline
+          file: week-04-ci-cd/day-07-final-devsecops-pipeline/Dockerfile
+          call: check
+
+      - name: Build and load Docker image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: week-04-ci-cd/day-07-final-devsecops-pipeline
+          file: week-04-ci-cd/day-07-final-devsecops-pipeline/Dockerfile
+
+          load: true
+          push: false
+
+          platforms: linux/amd64
+
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+
+          build-args: |
+            BUILD_VERSION=sha-${{ github.sha }}
+            BUILD_REVISION=${{ github.sha }}
+
+          cache-from: type=gha,scope=week04-final
+          cache-to: type=gha,mode=max,scope=week04-final
+
+      - name: Inspect Docker image
+        run: |
+          docker image inspect "$TEST_IMAGE"
+          docker history "$TEST_IMAGE"
+
+      - name: Export Docker image
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: |
+          ./scripts/export-image.sh \
+            "$TEST_IMAGE" \
+            artifacts
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: final-devsecops-docker-image
+          path: week-04-ci-cd/day-07-final-devsecops-pipeline/artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Write build summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Final Docker Build
+
+          **Image:** \`${TEST_IMAGE}\`
+
+          **Image ID:** \`${{ steps.build.outputs.imageid }}\`
+
+          **Digest:** \`${{ steps.build.outputs.digest }}\`
+
+          **Revision:** \`${{ github.sha }}\`
+          EOF
+
+  image-security:
+    name: Security - Image gate and smoke test
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+    needs:
+      - docker-build
+
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
+    outputs:
+      finding_count: ${{ steps.results.outputs.finding_count }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: final-devsecops-docker-image
+          path: week-04-ci-cd/day-07-final-devsecops-pipeline/downloaded-image
+
+      - name: Verify artifact checksum
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: |
+          cd downloaded-image
+
+          sha256sum \
+            -c final-devsecops-api.tar.gz.sha256
+
+      - name: Load Docker image
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: |
+          gunzip \
+            --stdout \
+            downloaded-image/final-devsecops-api.tar.gz \
+            | docker load
+
+          docker image inspect "$TEST_IMAGE"
+
+      - name: Create image report directory
+        run: |
+          mkdir -p \
+            "$LAB_DIRECTORY/reports/trivy-image"
+
+      - name: Generate Trivy image JSON
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.TEST_IMAGE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          format: json
+          output: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-image/trivy-image.json
+          exit-code: "0"
+
+      - name: Generate Trivy image SARIF
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.TEST_IMAGE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-image/trivy-image.sarif
+          exit-code: "0"
+          skip-setup-trivy: true
+
+      - name: Read image finding count
+        id: results
+        run: |
+          finding_count="$(
+            jq '
+              [
+                .Results[]?.Vulnerabilities[]?
+              ]
+              | length
+            ' \
+            "$LAB_DIRECTORY/reports/trivy-image/trivy-image.json"
+          )"
+
+          echo "finding_count=$finding_count" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "Image findings: $finding_count"
+
+      - name: Upload image reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: final-trivy-image-reports
+          path: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-image/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload image SARIF
+        if: >-
+          ${{
+            always() &&
+            (
+              github.event_name != 'pull_request' ||
+              github.event.pull_request.head.repo.full_name == github.repository
+            )
+          }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
+        with:
+          sarif_file: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-image/trivy-image.sarif
+          category: final-trivy-image
+
+      - name: Enforce container image gate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.TEST_IMAGE }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          skip-setup-trivy: true
+
+      - name: Run container smoke test
+        working-directory: ${{ env.LAB_DIRECTORY }}
+        run: |
+          ./scripts/smoke-test.sh \
+            "$TEST_IMAGE" \
+            18087 \
+            final-devsecops-ci-test
+
+      - name: Upload smoke-test report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: final-container-smoke-test
+          path: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/smoke-test/
+          if-no-files-found: warn
+          retention-days: 14
+
+  required-gate:
+    name: Required - Final DevSecOps Pipeline
+
+    if: ${{ always() }}
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 5
+
+    needs:
+      - workflow-security
+      - application-quality
+      - dependency-review
+      - semgrep
+      - trivy-filesystem
+      - docker-build
+      - image-security
+
+    steps:
+      - name: Evaluate pipeline results
+        shell: bash
+        run: |
+          workflow_security="${{ needs.workflow-security.result }}"
+          application_quality="${{ needs.application-quality.result }}"
+          dependency_review="${{ needs.dependency-review.result }}"
+          semgrep="${{ needs.semgrep.result }}"
+          trivy_filesystem="${{ needs.trivy-filesystem.result }}"
+          docker_build="${{ needs.docker-build.result }}"
+          image_security="${{ needs.image-security.result }}"
+
+          echo "Workflow security:  $workflow_security"
+          echo "Application quality: $application_quality"
+          echo "Dependency review:   $dependency_review"
+          echo "Semgrep:              $semgrep"
+          echo "Trivy filesystem:     $trivy_filesystem"
+          echo "Docker build:         $docker_build"
+          echo "Image security:       $image_security"
+
+          if [ "$workflow_security" != "success" ]; then
+            echo "Workflow security failed."
+            exit 1
+          fi
+
+          if [ "$application_quality" != "success" ]; then
+            echo "Application quality failed."
+            exit 1
+          fi
+
+          if [ "$dependency_review" != "success" ] &&
+             [ "$dependency_review" != "skipped" ]; then
+            echo "Dependency review failed."
+            exit 1
+          fi
+
+          if [ "$semgrep" != "success" ]; then
+            echo "Semgrep gate failed."
+            exit 1
+          fi
+
+          if [ "$trivy_filesystem" != "success" ]; then
+            echo "Trivy filesystem gate failed."
+            exit 1
+          fi
+
+          if [ "$docker_build" != "success" ]; then
+            echo "Docker build failed or was skipped."
+            exit 1
+          fi
+
+          if [ "$image_security" != "success" ]; then
+            echo "Image gate or smoke test failed."
+            exit 1
+          fi
+
+          echo "Final DevSecOps pipeline passed."
+
+      - name: Write required-gate summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Required Final DevSecOps Gate
+
+          | Check | Result |
+          |---|---|
+          | Workflow security | ${{ needs.workflow-security.result }} |
+          | Application quality | ${{ needs.application-quality.result }} |
+          | Dependency review | ${{ needs.dependency-review.result }} |
+          | Semgrep SAST | ${{ needs.semgrep.result }} |
+          | Trivy filesystem | ${{ needs.trivy-filesystem.result }} |
+          | Docker build | ${{ needs.docker-build.result }} |
+          | Image security and smoke test | ${{ needs.image-security.result }} |
+
+          **Required gate:** passed
+
+          **Commit:** \`${{ github.sha }}\`
+          EOF
+
+  workflow-summary:
+    name: Summary - Final pipeline
+
+    if: ${{ always() }}
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 5
+
+    needs:
+      - workflow-security
+      - application-quality
+      - dependency-review
+      - semgrep
+      - trivy-filesystem
+      - docker-build
+      - image-security
+      - required-gate
+
+    steps:
+      - name: Write final summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Week 04 Final DevSecOps Pipeline
+
+          | Job | Result |
+          |---|---|
+          | Workflow security | ${{ needs.workflow-security.result }} |
+          | Application quality | ${{ needs.application-quality.result }} |
+          | Dependency review | ${{ needs.dependency-review.result }} |
+          | Semgrep SAST | ${{ needs.semgrep.result }} |
+          | Trivy filesystem | ${{ needs.trivy-filesystem.result }} |
+          | Docker build | ${{ needs.docker-build.result }} |
+          | Trivy image and smoke test | ${{ needs.image-security.result }} |
+          | Required gate | ${{ needs.required-gate.result }} |
+
+          ## Finding counts
+
+          - Semgrep: \`${{ needs.semgrep.outputs.finding_count }}\`
+          - Trivy filesystem: \`${{ needs.trivy-filesystem.outputs.finding_count }}\`
+          - Trivy image: \`${{ needs.image-security.outputs.finding_count }}\`
+
+          **Commit:** \`${{ github.sha }}\`
+          EOF
