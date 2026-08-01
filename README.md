@@ -130,7 +130,34 @@ Labs:
 - Day 06 - Branch protection and pipeline hardening
 - Day 07 - Final CI/CD and security pipeline
 
+### Week 05 - Cloud Deployment and Runtime Operations
+
+Focus:
+
+- Cloud computing fundamentals
+- AWS account security
+- IAM and temporary credentials
+- AWS CLI and SSO
+- Regions and Availability Zones
+- Amazon VPC
+- Security Groups
+- Amazon EC2
+- Amazon ECR
+- GitHub Actions OIDC
+- Automated deployment
+- CloudWatch logs and metrics
+- Rollback and recovery
+
+Labs:
+
+- Day 01 - Cloud and AWS fundamentals
+- Day 02 - EC2, VPC and Security Groups
+- Day 03 - Amazon ECR and image publishing
+- Day 04 - Manual Docker deployment to EC2
+- Day 05 - GitHub Actions OIDC authentication
+- Day 06 - Automated deployment and rollback
+- Day 07 - Final secure AWS deployment project
+
 ### Future weeks
 
-- Week 05 - Cloud deployment
 - Week 06 - Observability, Terraform and Kubernetes overview

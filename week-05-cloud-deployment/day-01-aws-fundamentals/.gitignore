@@ -1,0 +1,17 @@
+# Local AWS lab configuration
+config/lab.env
+
+# Generated inventory and identity reports
+reports/
+
+# Credentials and keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local logs
+*.log
+
+# AWS CLI local data must never live in this repository
+.aws/
