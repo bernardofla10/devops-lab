@@ -1,0 +1,21 @@
+# Local AWS configuration
+config/lab.env
+
+# Local AWS resource state
+state/*.env
+state/*.tmp
+
+# Generated reports
+reports/
+
+# SSH and cryptographic keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local logs
+*.log
+
+# Never place AWS CLI configuration here
+.aws/
