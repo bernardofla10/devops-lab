@@ -1,0 +1,14 @@
+.git
+.github
+
+app/node_modules
+app/test
+
+reports
+scripts
+
+*.md
+*.log
+
+.gitignore
+compose.yml

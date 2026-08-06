@@ -1,0 +1,55 @@
+services:
+  api:
+    build:
+      context: .
+      args:
+        BUILD_VERSION: week06-day01
+        BUILD_REVISION: ${BUILD_REVISION:-local}
+
+    image: observability-foundations-api:week06-day01
+
+    container_name: observability-api-day01
+
+    environment:
+      APP_ENV: docker-compose
+      APP_VERSION: week06-day01
+      APP_REVISION: ${BUILD_REVISION:-local}
+      STARTUP_DELAY_MS: ${STARTUP_DELAY_MS:-3000}
+      PORT: "3000"
+
+    ports:
+      - "127.0.0.1:18061:3000"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http')
+          .get(
+            'http://localhost:3000/health',
+            response =>
+              process.exit(
+                response.statusCode === 200
+                  ? 0
+                  : 1
+              )
+          )
+          .on(
+            'error',
+            () => process.exit(1)
+          )
+      interval: 5s
+      timeout: 2s
+      start_period: 5s
+      retries: 5
+
+    logging:
+      driver: json-file
+
+      options:
+        max-size: "10m"
+        max-file: "3"

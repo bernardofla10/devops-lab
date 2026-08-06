@@ -1,0 +1,364 @@
+name: Week 06 Day 01 - Observability Foundations
+
+on:
+  push:
+    branches:
+      - main
+
+    paths:
+      - "week-06-observability-iac-kubernetes/day-01-observability-foundations/**"
+      - ".github/workflows/week-06-day-01-observability.yml"
+
+  pull_request:
+    branches:
+      - main
+
+    paths:
+      - "week-06-observability-iac-kubernetes/day-01-observability-foundations/**"
+      - ".github/workflows/week-06-day-01-observability.yml"
+
+  workflow_dispatch:
+
+concurrency:
+  group: >-
+    week06-day01-${{
+      github.workflow
+    }}-${{
+      github.head_ref || github.ref
+    }}
+
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  LAB_DIRECTORY: week-06-observability-iac-kubernetes/day-01-observability-foundations
+  IMAGE_REFERENCE: observability-foundations-api:ci
+  CONTAINER_NAME: observability-api-ci
+  BASE_URL: http://127.0.0.1:18061
+  PROMETHEUS_IMAGE: prom/prometheus:v3.13.2
+
+jobs:
+  quality:
+    name: Quality - Instrumented application
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: week-06-observability-iac-kubernetes/day-01-observability-foundations/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.x"
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Validate JavaScript
+        run: npm run lint
+
+      - name: Run automated tests
+        run: npm test
+
+  runtime-observability:
+    name: Runtime - Logs, health and metrics
+
+    needs:
+      - quality
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Create evidence directory
+        run: |
+          mkdir -p \
+            "$LAB_DIRECTORY/reports"
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag "$IMAGE_REFERENCE" \
+            --build-arg BUILD_VERSION=ci \
+            --build-arg BUILD_REVISION="$GITHUB_SHA" \
+            "$LAB_DIRECTORY"
+
+      - name: Start instrumented container
+        run: |
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            --restart no \
+            -p 127.0.0.1:18061:3000 \
+            -e APP_ENV=github-actions \
+            -e APP_VERSION=ci \
+            -e APP_REVISION="$GITHUB_SHA" \
+            -e STARTUP_DELAY_MS=1000 \
+            "$IMAGE_REFERENCE"
+
+      - name: Wait for health
+        shell: bash
+        run: |
+          for attempt in $(seq 1 30); do
+            status="$(
+              docker inspect \
+                --format '{{.State.Status}}' \
+                "$CONTAINER_NAME" \
+                2>/dev/null \
+                || echo missing
+            )"
+
+            health="$(
+              docker inspect \
+                --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+                "$CONTAINER_NAME" \
+                2>/dev/null \
+                || echo missing
+            )"
+
+            echo \
+              "Attempt $attempt/30: status=$status health=$health"
+
+            if [ "$health" = "healthy" ]; then
+              exit 0
+            fi
+
+            if [ "$status" = "exited" ]; then
+              docker logs "$CONTAINER_NAME"
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          docker logs "$CONTAINER_NAME"
+          exit 1
+
+      - name: Generate HTTP traffic
+        shell: bash
+        run: |
+          for attempt in $(seq 1 10); do
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              "$BASE_URL/" \
+              >/dev/null
+          done
+
+          for delay in 10 25 50 100 250 500 1000; do
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              "$BASE_URL/work?delayMs=$delay" \
+              >/dev/null
+          done
+
+          for attempt in $(seq 1 3); do
+            status="$(
+              curl \
+                --silent \
+                --output /dev/null \
+                --write-out "%{http_code}" \
+                "$BASE_URL/error"
+            )"
+
+            test "$status" = "500"
+          done
+
+          for attempt in $(seq 1 2); do
+            status="$(
+              curl \
+                --silent \
+                --output /dev/null \
+                --write-out "%{http_code}" \
+                "$BASE_URL/unknown"
+            )"
+
+            test "$status" = "404"
+          done
+
+      - name: Verify health endpoints
+        run: |
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            "$BASE_URL/live" \
+            > "$LAB_DIRECTORY/reports/live.json"
+
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            "$BASE_URL/ready" \
+            > "$LAB_DIRECTORY/reports/ready.json"
+
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            "$BASE_URL/health" \
+            > "$LAB_DIRECTORY/reports/health.json"
+
+          jq -e \
+            '.status == "alive"' \
+            "$LAB_DIRECTORY/reports/live.json"
+
+          jq -e \
+            '.status == "ready"' \
+            "$LAB_DIRECTORY/reports/ready.json"
+
+          jq -e '
+            .status == "ok"
+            and
+            .checks.live == true
+            and
+            .checks.ready == true
+          ' \
+            "$LAB_DIRECTORY/reports/health.json"
+
+      - name: Capture Prometheus metrics
+        run: |
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            "$BASE_URL/metrics" \
+            > "$LAB_DIRECTORY/reports/metrics.prom"
+
+      - name: Validate Prometheus exposition
+        run: |
+          docker run \
+            --rm \
+            --interactive \
+            --entrypoint=promtool \
+            "$PROMETHEUS_IMAGE" \
+            check metrics \
+            < "$LAB_DIRECTORY/reports/metrics.prom"
+
+          grep \
+            --quiet \
+            '^observability_http_requests_total' \
+            "$LAB_DIRECTORY/reports/metrics.prom"
+
+          grep \
+            --quiet \
+            '^observability_http_request_duration_seconds_bucket' \
+            "$LAB_DIRECTORY/reports/metrics.prom"
+
+          if grep \
+            --quiet \
+            'delayMs=' \
+            "$LAB_DIRECTORY/reports/metrics.prom"; then
+
+            echo "Unbounded query parameter found in metric labels."
+            exit 1
+          fi
+
+      - name: Capture and validate logs
+        run: |
+          docker logs \
+            "$CONTAINER_NAME" \
+            > "$LAB_DIRECTORY/reports/container.log" \
+            2>&1
+
+          jq \
+            --compact-output \
+            'select(.message == "request_completed")' \
+            "$LAB_DIRECTORY/reports/container.log" \
+            > "$LAB_DIRECTORY/reports/request-logs.jsonl"
+
+          jq \
+            --compact-output \
+            'select(.level == "error")' \
+            "$LAB_DIRECTORY/reports/container.log" \
+            > "$LAB_DIRECTORY/reports/error-logs.jsonl"
+
+          test \
+            "$(wc -l < "$LAB_DIRECTORY/reports/request-logs.jsonl")" \
+            -gt 0
+
+          test \
+            "$(wc -l < "$LAB_DIRECTORY/reports/error-logs.jsonl")" \
+            -gt 0
+
+      - name: Save container state
+        run: |
+          docker inspect \
+            "$CONTAINER_NAME" \
+            > "$LAB_DIRECTORY/reports/container-inspect.json"
+
+      - name: Upload observability evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: week06-day01-observability-evidence
+          path: week-06-observability-iac-kubernetes/day-01-observability-foundations/reports/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop container
+        if: ${{ always() }}
+        run: |
+          docker logs "$CONTAINER_NAME" \
+            2>&1 || true
+
+          docker rm -f "$CONTAINER_NAME" \
+            >/dev/null 2>&1 || true
+
+  summary:
+    name: Summary - Observability foundations
+
+    if: ${{ always() }}
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 5
+
+    needs:
+      - quality
+      - runtime-observability
+
+    steps:
+      - name: Write summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Week 06 Day 01
+
+          | Check | Result |
+          |---|---|
+          | Application quality | ${{ needs.quality.result }} |
+          | Logs, health and metrics | ${{ needs.runtime-observability.result }} |
+
+          ## Implemented signals
+
+          - structured JSON logs
+          - request identifiers
+          - liveness endpoint
+          - readiness endpoint
+          - aggregate health endpoint
+          - Prometheus counters
+          - Prometheus gauges
+          - Prometheus latency histogram
+
+          **Commit:** \`${{ github.sha }}\`
+          EOF

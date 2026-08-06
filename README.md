@@ -158,6 +158,27 @@ Labs:
 - Day 06 - Automated deployment and rollback
 - Day 07 - Final secure AWS deployment project
 
-### Future weeks
+### Week 06 - Observability, IaC and Kubernetes Foundations
 
-- Week 06 - Observability, Terraform and Kubernetes overview
+Focus:
+
+- structured application logs
+- health, liveness and readiness
+- Prometheus metrics
+- Prometheus scraping and PromQL
+- Grafana dashboards and alerts
+- Terraform fundamentals
+- Terraform state and lifecycle
+- AWS infrastructure as code
+- Kubernetes fundamentals
+- local cluster operations
+
+Labs:
+
+- Day 01 - Observability foundations
+- Day 02 - Prometheus scraping and PromQL
+- Day 03 - Grafana dashboards and alerting
+- Day 04 - Terraform fundamentals
+- Day 05 - Terraform AWS resource lifecycle
+- Day 06 - Kubernetes fundamentals with kind
+- Day 07 - Final observability, IaC and Kubernetes recap
