@@ -93,7 +93,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "24.x"
           package-manager-cache: false
@@ -240,7 +240,7 @@ jobs:
             )
           }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           sarif_file: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/semgrep/semgrep.sarif
           category: final-semgrep
@@ -337,7 +337,7 @@ jobs:
             )
           }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           sarif_file: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-filesystem/trivy-fs.sarif
           category: final-trivy-filesystem
@@ -389,10 +389,10 @@ jobs:
           persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - name: Generate Docker metadata
         id: metadata
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: final-devsecops-api
 
@@ -405,7 +405,7 @@ jobs:
             org.opencontainers.image.description=Week 04 final DevSecOps pipeline
 
       - name: Validate Docker build configuration
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: week-04-ci-cd/day-07-final-devsecops-pipeline
           file: week-04-ci-cd/day-07-final-devsecops-pipeline/Dockerfile
@@ -413,7 +413,7 @@ jobs:
 
       - name: Build and load Docker image
         id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: week-04-ci-cd/day-07-final-devsecops-pipeline
           file: week-04-ci-cd/day-07-final-devsecops-pipeline/Dockerfile
@@ -492,7 +492,7 @@ jobs:
           persist-credentials: false
 
       - name: Download Docker image artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: final-devsecops-docker-image
           path: week-04-ci-cd/day-07-final-devsecops-pipeline/downloaded-image
@@ -582,7 +582,7 @@ jobs:
             )
           }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           sarif_file: week-04-ci-cd/day-07-final-devsecops-pipeline/reports/trivy-image/trivy-image.sarif
           category: final-trivy-image
